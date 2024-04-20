@@ -3,6 +3,7 @@
 const int CLOCK_PIN = 52;
 const int DATA_PIN = 51;
 const int LATCH_PIN = A0; // on port f??
+const int OE = 4; // Activw LOW
 
 const int CLOCK_XY_SWITCH = 5;
 const int CLOCK_YZ_SWITCH = 6;
@@ -22,6 +23,10 @@ unsigned long clock_rotate_x_y = 0;
 
 const int drop_interval = 2000;
 unsigned long previousMillis = 0;  // will store last time LED was updated
+unsigned long last_show = 0;
+
+int try_rand_generate = 0;
+int color = 0;
 
 bool landed = false;
 
@@ -31,6 +36,8 @@ struct Point {
   int z;
 };
 
+int alpha = 1;
+int trigger = false;
 
 const struct Point tetromino[][8] = {
   {{0, 0, 0}, {0, 0, 1}, {0, 0, 2}},
@@ -40,7 +47,16 @@ const struct Point tetromino[][8] = {
 };
 
 volatile int game_matrix[10][4][4] = {};
-Point current_blocks[8];
+volatile Point global_current_blocks[8] = {
+  {-1, -1, -1},
+  {-1, -1, -1},
+  {-1, -1, -1},
+  {-1, -1, -1},
+  {-1, -1, -1},
+  {-1, -1, -1},
+  {-1, -1, -1},
+  {-1, -1, -1},
+};
 
 int anode_level = 0;
 
@@ -57,6 +73,8 @@ void setup() {
   pinMode(CLOCK_XY_SWITCH, INPUT);
   pinMode(CLOCK_YZ_SWITCH, INPUT);
   pinMode(CLOCK_ZX_SWITCH, INPUT);
+  // pinMode(OE, OUTPUT);
+  digitalWrite(OE, HIGH);
 
   pinMode(ANTI_CLOCK_XY_SWITCH, INPUT);
   pinMode(ANTI_CLOCK_YZ_SWITCH, INPUT);
@@ -72,7 +90,7 @@ void setup() {
 
   digitalWrite(LATCH_PIN, LOW);
 
-  for (int i = 0; i < 8; i++) {current_blocks[i] = {-1, -1, -1};}
+  for (int i = 0; i < 8; i++) {global_current_blocks[i] = {-1, -1, -1};}
 
   SPI.begin();
 
@@ -85,17 +103,25 @@ bool is_valid_point(Point p) {
 }
 
 void draw_tetromino(){
-  for (int i = 0; i < sizeof(current_blocks) / sizeof(current_blocks[0]); i++) {
-    if (current_blocks[i].x != -1) {
-      game_matrix[current_blocks[i].z][current_blocks[i].y][current_blocks[i].x] = 1;
+  for (int i = 0; i < 8; i++) {
+    if (global_current_blocks[i].x != -1) {
+      game_matrix[global_current_blocks[i].z][global_current_blocks[i].y][global_current_blocks[i].x] = 1;
     }
   }
 }
 
+void pos_global_blocks() {
+  for (int i = 0; i < 8; i++) {
+    Serial.print(global_current_blocks[i].x);
+    Serial.print(global_current_blocks[i].y);
+    Serial.println(global_current_blocks[i].z);
+  }
+}
+
 void erase_tetromino() {
-  for (int i = 0; i < sizeof(current_blocks) / sizeof(current_blocks[0]); i++) {
-    if (current_blocks[i].x != -1) {
-      game_matrix[current_blocks[i].z][current_blocks[i].y][current_blocks[i].x] = 0;
+  for (int i = 0; i < 8; i++) {
+    if (global_current_blocks[i].x != -1) {
+      game_matrix[global_current_blocks[i].z][global_current_blocks[i].y][global_current_blocks[i].x] = 0;
     }
   }
 }
@@ -103,15 +129,15 @@ void erase_tetromino() {
 void move(Point direction) {
   Point new_block_location[8];
   for (int i = 0; i < 8; i++) {
-    if (current_blocks[i].x == -1 && current_blocks[i].y == -1 && current_blocks[i].z == -1) {
+    if (global_current_blocks[i].x == -1 && global_current_blocks[i].y == -1 && global_current_blocks[i].z == -1) {
       new_block_location[i] = {-1, -1, -1};
     }
 
-    Point pos_position = {current_blocks[i].x + direction.x, current_blocks[i].y + direction.y, current_blocks[i].z + direction.z};
+    Point pos_position = {global_current_blocks[i].x + direction.x, global_current_blocks[i].y + direction.y, global_current_blocks[i].z + direction.z};
     // if the pos_position is colliding with itself its not an issue.... 
     bool possibly_invalid = true;
     for (int j = 0; j < 8; j++) {
-      if (pos_position.x == current_blocks[j].x && pos_position.y == current_blocks[j].y && pos_position.z == current_blocks[j].z) {
+      if (pos_position.x == global_current_blocks[j].x && pos_position.y == global_current_blocks[j].y && pos_position.z == global_current_blocks[j].z) {
         possibly_invalid = false;
         break;
       }
@@ -132,21 +158,57 @@ void move(Point direction) {
   erase_tetromino();
 
   for (int i = 0; i < 8; i++) {
-    current_blocks[i] = new_block_location[i];
+    global_current_blocks[i] = new_block_location[i];
   }
 
   draw_tetromino();
 }
 
+void remove_row(int row_number) {
+  
+}
+
 void breaking_rows() {
-  Serial.println("Time to check for breaking rows");
+  // Serial.println("Time to check for breaking rows");
+
+  // check game matrix
+  bool break_rows[10];
+  for (int i = 0; i < 10; i++) {
+    bool break_row = true;
+    for (int j = 0; i < 4; j++) {
+      for (int k = 0; k < 4; k++) {
+        if (game_matrix[i][j][k] == 0) {
+          break_row = false;
+          break;
+        }
+      }
+      if (!break_row) {
+        break;
+      }
+    }
+    break_rows[i] = break_row;
+  }
+
+  // 
 }
 
 
-bool generate_new_block() {
-    int randNumber = random(4);
+void generate_new_block() {
+    // int randNumber = random(4);
+
+
+    if (try_rand_generate == 5) {
+      while(true) {
+        send_to_shift_reg(); // Program end
+      }
+      return;
+    }
+
+    int randNumber = 2;
     
-    Point start_index = {random(4), random(4), 0}; // I want this block to be randomly translated
+    Point start_index = {1, 1, 1}; // I want this block to be randomly translated
+
+    // Point start_index = {1, 1, 1};
 
     Point new_blocks[8] = {};
     for (int i = 0; i < sizeof(tetromino[randNumber]) / sizeof(struct Point); i++) { // TODO: Check the i less than condition
@@ -155,17 +217,19 @@ bool generate_new_block() {
       new_block.y = start_index.y + tetromino[randNumber][i].y;
       new_block.z = start_index.z + tetromino[randNumber][i].z;
       if (!is_valid_point(new_block)) {
+        try_rand_generate += 1;
         generate_new_block(); // keep trying until you finally get something
+        return;
       }
       new_blocks[i] = new_block;
     }
 
     for (int i = 0; i < 8; i++) {
-      current_blocks[i] = new_blocks[i];
+      global_current_blocks[i] = new_blocks[i];
     }
 
     draw_tetromino();
-    
+    print_game_matrix();
 
     return;
 }
@@ -196,7 +260,7 @@ void single_color_cathode_transfer() {
     }
   }
 
-  // Finally we can get two 8 bit integer from this to send SPI.
+  // // Finally we can get two 8 bit integer from this to send SPI.
   uint8_t cathode2 = 0;
   for (int i = 15; i >= 8; i--) {
     cathode2 = cathode2 << 1;
@@ -211,9 +275,8 @@ void single_color_cathode_transfer() {
 
   cathode1 = swap_5_and_6(cathode1);
   
-  // I claim that turning the Pillars one after one would be much beneficial.. Test of persistence of vision.. Did not work :(
-  // uint8_t cathode1 = 1 << cathode_pillar;
-  // uint8_t cathode2 = 1 << cathode_pillar;
+  // turning the Pillars one after one would be much beneficial.. Test of persistence of vision.. Did not work :(
+
 
   SPI.transfer(~cathode2);
   SPI.transfer(~cathode1);
@@ -247,44 +310,68 @@ void single_color_cathode_transfer() {
 int gamma = 1;
 
 void rotate_x_y() {
-  Point pivot_pos = current_blocks[0]; // pivot would remain at the same position, everything around it will move
+  // Point pivot_pos = global_current_blocks[0]; // pivot would remain at the same position, everything around it will move
+
+  int pivot_pos_x = global_current_blocks[0].x;
+  int pivot_pos_y = global_current_blocks[0].y;
+  int pivot_pos_z = global_current_blocks[0].z;
+
   Point new_blocks[8];
 
+  bool rotated = false;
+
   for (int i = 0; i < 8; i++) {
-    if (current_blocks[i].x == -1) {
+    if (global_current_blocks[i].x == -1) {
       new_blocks[i] = {-1, -1, -1};
       continue;
     }
 
-    Point translated = {pivot_pos.x - current_blocks[i].x, pivot_pos.y - current_blocks[i].y, pivot_pos.z - current_blocks[i].z};
+    Point translated = {global_current_blocks[i].x - pivot_pos_x, global_current_blocks[i].y - pivot_pos_y,  global_current_blocks[i].z - pivot_pos_z};
 
     // Now swap x and y
-    translated = {translated.y + pivot_pos.x, translated.x + pivot_pos.y, translated.z + pivot_pos.z};
+    translated = {translated.y + pivot_pos_x, translated.x + pivot_pos_y, translated.z + pivot_pos_z};
 
     // if this is equal to corrent position, all good
-    if(translated.x == current_blocks[i].x && translated.y == current_blocks[i].y && translated.z == current_blocks[i].z) {
+    if(translated.x == global_current_blocks[i].x && translated.y == global_current_blocks[i].y && translated.z == global_current_blocks[i].z) {
       new_blocks[i] = translated;
       continue;
+    } else {
+      rotated = true;
     }
 
     // else validate
     if (!is_valid_point(translated)) {
+      Serial.print("Cannot rotate because ");
+      Serial.print(global_current_blocks[i].x);
+      Serial.print(global_current_blocks[i].y);
+      Serial.print(global_current_blocks[i].z);
+      Serial.print(" WHich is converted to ");
+      Serial.print(translated.x);
+      Serial.print(translated.y);
+      Serial.println(translated.z);
       return;
     }
 
     new_blocks[i] = translated;
   }
 
-  Serial.println("Before Rotation:");
-  print_game_matrix();
+  // Serial.println("Before Rotation:");
+  // print_game_matrix();
 
-  erase_tetromino();
-  for (int i = 0; i < 8; i++) {
-    current_blocks[i] = new_blocks[i];
+  if (rotated) {
+    Serial.println("Rotated finished");
+    erase_tetromino();
+
+    for (int i = 0; i < 8; i++) {
+      global_current_blocks[i] = new_blocks[i];
+    }
+   
+    draw_tetromino();
+  } else {
+    Serial.println("Never rotated");
   }
-  draw_tetromino();
-  Serial.println("After Rotation:");
-  print_game_matrix();
+  // Serial.println("After Rotation:");
+  // print_game_matrix();
 
 }
 
@@ -293,48 +380,57 @@ void anode_spi_transfer() {
 
   switch (anode_level) {
     case 0:
-    SPI.transfer(0);
-    SPI.transfer(1);
+    SPI.transfer(~0);
+    SPI.transfer(~1);
     break;
     case 1:
-    SPI.transfer(0);
-    SPI.transfer(2);
+    SPI.transfer(~0);
+    SPI.transfer(~2);
     break;
     case 2:
-    SPI.transfer(0);
-    SPI.transfer(4);
+    SPI.transfer(~0);
+    SPI.transfer(~4);
     break;
     case 3:
-    SPI.transfer(0);
-    SPI.transfer(8);
+    SPI.transfer(~0);
+    SPI.transfer(~8);
     break;
     case 4:
-    SPI.transfer(0);
-    SPI.transfer(16);
+    SPI.transfer(~0);
+    SPI.transfer(~16);
     break;
     case 5:
-    SPI.transfer(0);
-    SPI.transfer(32);
+    SPI.transfer(~0);
+    SPI.transfer(~32);
     break;
     case 6:
-    SPI.transfer(0);
-    SPI.transfer(64);
+    SPI.transfer(~0);
+    SPI.transfer(~64);
     break;
     case 7:
-    SPI.transfer(0);
-    SPI.transfer(128);
+    SPI.transfer(~0);
+    SPI.transfer(~128);
     break;
     case 8:
-    SPI.transfer(2);
-    SPI.transfer(0);
+    SPI.transfer(~1);
+    SPI.transfer(~0);
     break;
     case 9:
-    SPI.transfer(1);
-    SPI.transfer(0);
+    SPI.transfer(~2);
+    SPI.transfer(~0);
     break;
 
   }
+
+  // if (anode_level <= 8) {
+  //   SPI.transfer(~0);
+  //   SPI.transfer(~(2 << anode_level));
+  // } else {
+  //   SPI.transfer(~(2 << (anode_level - 8)));
+  //   SPI.transfer(~0);
+  // }
 }
+
 
 
 void print_game_matrix() {
@@ -351,56 +447,97 @@ void print_game_matrix() {
 
 void send_to_shift_reg() {
 
+  // digitalWrite(OE, LOW);
   anode_spi_transfer();
 
-  // blue
-  SPI.transfer(255);
-  SPI.transfer(255);
-  // green
-  SPI.transfer(255);
-  SPI.transfer(1);
-  //red
+  if (color == 2) {
+    // blue
+    SPI.transfer(255);
+    SPI.transfer(255);
+  } else {
+    SPI.transfer(255);
+    SPI.transfer(255);
+  }
 
-  single_color_cathode_transfer();
+  if (color == 1) {
+      // green
+    SPI.transfer(8);
+    SPI.transfer(255);
+  } else {
+    SPI.transfer(255);
+    SPI.transfer(255);
+  }
+
+  if (color == 0) {
+    // red
+    single_color_cathode_transfer();
+  } else {
+    SPI.transfer(255);
+    SPI.transfer(255);   
+  }
 
   anode_level += 1;
+  if (anode_level == 10) {
+    color += 1;
+    color %= 3;
+  }
   anode_level %= 10;
 
   PORTF |= B00000001; // Latch pin HIGH
-  PORTF &= ~(1 << 0); // Latch pin LOW
+  PORTF &= ~(1 << 0); // Latch pin LOW  
+
+  // digitalWrite(OE, HIGH);
 
 }
 
 int beta = 0;
 
-void loop() {
-  send_to_shift_reg();
-  unsigned long current_millis = millis();
+void user_input() {
 
-  if (analogRead(MOVE_X) < 200 && (current_millis - last_move_x >= 500)) {
-    move({-1, 0, 0});
-    last_move_x = current_millis;
-  } else if (analogRead(MOVE_X) > 900 && (current_millis - last_move_x >= 500)) {
-    move({1, 0, 0});
-    last_move_x = current_millis;
-  }
+    unsigned long current_millis = millis();
 
-  if (analogRead(MOVE_Y) < 200 && (current_millis - last_move_y >= 500)) {
-    move({0, 1, 0});
-    last_move_y = current_millis;
-  } else if (analogRead(MOVE_Y) > 900 && (current_millis - last_move_y >= 500)) {
-    move({0, -1, 0});
-    last_move_y = current_millis;
-  }
+  //   if (analogRead(MOVE_X) == 0 && (current_millis - last_move_x >= 200)) {
+  //   move({-1, 0, 0});
+  //   last_move_x = current_millis;
+  // } else if (analogRead(MOVE_X) == 1023 && (current_millis - last_move_x >= 200)) {
+  //   move({1, 0, 0});
+  //   last_move_x = current_millis;
+  // }
+
+  // if (analogRead(MOVE_Y) < 200 && (current_millis - last_move_y >= 200)) {
+  //   move({0, 1, 0});
+  //   last_move_y = current_millis;
+  // } else if (analogRead(MOVE_Y) > 900 && (current_millis - last_move_y >= 200)) {
+  //   move({0, -1, 0});
+  //   last_move_y = current_millis;
+  // }
 
   if (digitalRead(CLOCK_XY_SWITCH) == 1 && (current_millis - clock_rotate_x_y >= 2000)) {
-    Serial.println("Rotating");
-    rotate_x_y();
+    // Serial.println("Rotating");
+    // previousMillis = current_millis;
+    trigger = true;
     clock_rotate_x_y = current_millis;
+    Serial.println("ROtating");
+    rotate_x_y();
   }
+
+}
+
+void loop() {
+
+  unsigned long current_millis = millis();
+  send_to_shift_reg();
+
+  // if (current_millis - last_show >= 50) {
+  //   send_to_shift_reg();
+  //   last_show = current_millis;
+  // }
+
+  user_input();
 
   if (current_millis - previousMillis >= drop_interval) {
     move({0, 0, 1});
+    pos_global_blocks();
     previousMillis = current_millis;
   }
 
