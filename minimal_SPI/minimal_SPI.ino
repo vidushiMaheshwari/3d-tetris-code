@@ -5,6 +5,8 @@ const int DATA_PIN = 51;
 const int LATCH_PIN = A0; // on port f??
 const int OE = 4; // Activw LOW
 
+volatile bool game_end = true;
+
 const int CLOCK_XY_SWITCH = A10;
 const int CLOCK_YZ_SWITCH = A7;
 const int CLOCK_ZX_SWITCH = A6;
@@ -41,7 +43,7 @@ int alpha = 1;
 int trigger = false;
 
 const struct Point tetromino[][8] = {
-  {{0, 0, 0}, {0, 0, 1}, {0, 0, -1}},
+  {{0, 0, 0}, {0, 0, 1}, {0, 0, 2}},
   {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0}, {0, 0, 1}, {1, 0, 1}, {0, 1, 1}, {1, 1, 1}},
   {{0, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, 2}}, // L
   {{0, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {1, 0, 1}} // 
@@ -50,8 +52,46 @@ const struct Point tetromino[][8] = {
 volatile int game_matrix[10][4][4] = {};
 
 
+const int display_segment[] = { // These are active HIGH
+ 3,
+7,
+11,
+9,
+8,
+26,
+12
+};
 
+// const int display_digit[] = { // These are active LOW
+//   28,
+// 5,
+// 6,
+// 13
+// };
 
+const int display_digit[] = {
+  13,
+  6,
+  5,
+  28,
+};
+
+int digit_show = 0;
+unsigned long last_time_digit = 0;
+
+// const byte numbers[10] =   // Describe each digit in terms of display segments  0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+// {
+//   B11111100, //0
+//   B01100000, //1
+//   B11011010, //2
+//   B11110010, //3
+//   B01100110, //4
+//   B10110110, //5
+//   B10111110, //6
+//   B11100000, //7
+//   B11111111, //8
+//   B11110110, //9
+// };
 
 volatile Point global_current_blocks[8] = {
   {-1, -1, -1},
@@ -66,46 +106,47 @@ volatile Point global_current_blocks[8] = {
 
 int anode_level = 0;
 
-const int DIGIT_ONE = A4;
-const int SEGMENT_A = A5;
-const int SEGMENT_F = A6;
-const int DIGIT_TWO = A7;
-const int DIGIT_THREE = A8;
-const int SEGMENT_B = A9;
-const int DIGIT_FOUR = A10;
-const int SEGMENT_G = A11;
-const int SEGMENT_C = A12;
-// A13 is decimal
-const int SEGMENT_D= A14;
-const int SEGMENT_E = A15;
+// const int DIGIT_ONE = A4;
+// const int SEGMENT_A = A5;
+// const int SEGMENT_F = A6;
+// const int DIGIT_TWO = A7;
+// const int DIGIT_THREE = A8;
+// const int SEGMENT_B = A9;
+// const int DIGIT_FOUR = A10;
+// const int SEGMENT_G = A11;
+// const int SEGMENT_C = A12;
+// // A13 is decimal
+// const int SEGMENT_D= A14;
+// const int SEGMENT_E = A15;
 
 const int numbers[10][8] = {
-  {0, 0, 0, 0, 0, 0, 1}, 
-  {1, 0, 0, 1, 1, 1, 1},
-  {0, 0, 1, 0, 0, 1, 0},
-  {0, 0, 0, 0, 1, 1, 0},
-  {1, 0, 0, 1, 1, 0, 0},
-  {0, 1, 0, 0, 1, 0, 0},
-  {0, 1, 0, 0, 0, 0, 0},
-  {0, 0, 0, 1, 1, 1, 1},
-  {0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 1, 0, 0}
+  {1, 1, 1, 1, 1, 1, 0}, 
+  {0, 1, 1, 0, 0, 0, 0},
+  {1, 1, 0, 1, 1, 0, 1},
+  {1, 1, 1, 1, 0, 0, 1},
+  {0, 1, 1, 0, 0, 1, 1},
+  {1, 0, 1, 1, 0, 1, 1},
+  {1, 0, 1, 1, 1, 1, 1},
+  {1, 1, 1, 0, 0, 0, 0},
+  {1, 1, 1, 1, 1, 1, 1},
+  {1, 1, 1, 1, 0, 1, 1}
 };
 
-const int segment_out[] = {
-  SEGMENT_A, SEGMENT_B, SEGMENT_C, SEGMENT_D, SEGMENT_E, SEGMENT_F, SEGMENT_G
-};
+// const int segment_out[] = {
+//   SEGMENT_A, SEGMENT_B, SEGMENT_C, SEGMENT_D, SEGMENT_E, SEGMENT_F, SEGMENT_G
+// };
 
-const int segment_digit[] = {
-  DIGIT_ONE, DIGIT_TWO, DIGIT_THREE, DIGIT_FOUR
-};
+// const int segment_digit[] = {
+//   DIGIT_ONE, DIGIT_TWO, DIGIT_THREE, DIGIT_FOUR
+// };
 
 int score = 0;
 int segment_digit_counter = 0; 
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(2000000);
+  Serial.begin(9600);
+  Serial.println("started");
 
 //     /** Testing whether the LEDs are properly connected **/
 //   for (int i = 0; i < 10; i++) {
@@ -144,9 +185,20 @@ void setup() {
 
   for (int i = 0; i < 8; i++) {global_current_blocks[i] = {-1, -1, -1};}
 
+  for (int i = 0; i < 7; i++) {
+    pinMode(display_segment[i], OUTPUT);
+    digitalWrite(display_segment[i], LOW); // everything is on
+  }
+
+
+  for (int i = 0; i < 4; i++) {
+    pinMode(display_digit[i], OUTPUT);
+    digitalWrite(display_digit[i], HIGH); // everything is off
+  }
+
   SPI.begin();
 
-  generate_new_block();
+  // generate_new_block();
 
 }
 
@@ -198,6 +250,7 @@ void move(Point direction) {
     if (possibly_invalid && !is_valid_point(pos_position)) {
       if (direction.z == 1) {
         landed = true;
+        score += 1;
         breaking_rows();
         generate_new_block();
       }
@@ -255,9 +308,12 @@ void breaking_rows() {
     break_rows[i] = break_row;
   }
 
+  int deleted_yet = 0;
   for (int j = 9; j >= 0; j--) {
     if (break_rows[j]) {
-      remove_row(j);
+      score += 10;
+      remove_row(j + deleted_yet);
+      deleted_yet += 1;
     }
   }
 }
@@ -267,19 +323,30 @@ void breaking_rows() {
 
 void generate_new_block() {
     // int randNumber = random(4);
+    int randNumber = 3;
 
+    if (try_rand_generate == 1000) {
 
-    if (try_rand_generate == 5) {
-      while(true) {
-        send_to_shift_reg(); // Program end
+      for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 4; j++) {
+          for (int k = 0; k < 4; k++) {
+            game_matrix[i][j][k] = 0;
+          }
+        }
       }
+
+      for (int i = 0; i < 8; i++) {
+        global_current_blocks[i] = {-1, -1, -1};
+      }
+      
+      game_end = true;
       return;
     }
 
-    int randNumber = 0;
+    // int randNumber = 0;
     
     // Point start_index = {1, 1, 1}; // I want this block to be randomly translated
-    Point start_index = {random(4), random(4), 1};
+    Point start_index = {random(4), random(4), 0};
 
     // Point start_index = {1, 1, 1};
 
@@ -296,6 +363,8 @@ void generate_new_block() {
       }
       new_blocks[i] = new_block;
     }
+
+    try_rand_generate = 0;
 
     for (int i = 0; i < 8; i++) {
       global_current_blocks[i] = new_blocks[i];
@@ -349,7 +418,6 @@ void single_color_cathode_transfer() {
   cathode1 = swap_5_and_6(cathode1);
   
   // turning the Pillars one after one would be much beneficial.. Test of persistence of vision.. Did not work :(
-
 
   SPI.transfer(~cathode2);
   SPI.transfer(~cathode1);
@@ -475,7 +543,7 @@ void rotate(int axis, bool clock) {
     }
 
     if (!trans_copy) {
-      Serial.println("New rotation");
+      // Serial.println("New rotation");
       rotated = true;
     }
 
@@ -489,7 +557,7 @@ void rotate(int axis, bool clock) {
     // }
 
     if (!trans_copy && !is_valid_point(translated)) {
-      Serial.println("Failed rotating");
+      // Serial.println("Failed rotating");
       return;
     }
 
@@ -627,85 +695,113 @@ int beta = 0;
 
 void user_input() {
 
+  if (!game_end) {
+
     if (analogRead(MOVE_X) < 200) {
-      move({1, 0, 0});
-    previousUserInput = millis();
-  } else if (analogRead(MOVE_X) > 900) {
-    move({-1, 0, 0});
-    previousUserInput = millis();
-  }
+        move({1, 0, 0});
+      previousUserInput = millis();
+    } else if (analogRead(MOVE_X) > 900) {
+      move({-1, 0, 0});
+      previousUserInput = millis();
+    }
 
-  if (analogRead(MOVE_Y) < 200) {
-    move({0, 1, 0});
-    previousUserInput = millis();
-  } else if (analogRead(MOVE_Y) > 900) {
-    move({0, -1, 0});
-    previousUserInput = millis();
-  }
+    if (analogRead(MOVE_Y) < 200) {
+      move({0, 1, 0});
+      previousUserInput = millis();
+    } else if (analogRead(MOVE_Y) > 900) {
+      move({0, -1, 0});
+      previousUserInput = millis();
+    }
 
-  // if (digitalRead(CLOCK_XY_SWITCH) == 1 && (current_millis - clock_rotate_x_y >= 2000)) {
-  //   // Serial.println("Rotating");
-  //   // previousMillis = current_millis;
-  //   trigger = true;
-  //   clock_rotate_x_y = current_millis;
-  //   // Serial.println("ROtating");
-  //   rotate(0, true);
-  // }
+    // if (digitalRead(CLOCK_XY_SWITCH) == 1 && (current_millis - clock_rotate_x_y >= 2000)) {
+    //   // Serial.println("Rotating");
+    //   // previousMillis = current_millis;
+    //   trigger = true;
+    //   clock_rotate_x_y = current_millis;
+    //   // Serial.println("ROtating");
+    //   rotate(0, true);
+    // }
 
-  if (digitalRead(CLOCK_XY_SWITCH)) {
-    Serial.println("Detected green button");
-    rotate(0, true);
-    previousUserInput = millis();
-  } else if (digitalRead(CLOCK_YZ_SWITCH)) {
-    Serial.println("Detected red button");
-    rotate(1, true);
-    previousUserInput = millis();
-  } else if (digitalRead(CLOCK_ZX_SWITCH)) {
-    // Serial.println("Tried rotating xz");
-    Serial.println("Detected white button");
-    rotate(2, true);
-    previousUserInput = millis();
-  } else if (digitalRead(ANTI_CLOCK_XY_SWITCH)) {
-    rotate(0, false);
-    previousUserInput = millis();
-  } else if (digitalRead(ANTI_CLOCK_YZ_SWITCH)) {
-    rotate(1, false);
-    previousUserInput = millis();
-  } else if (digitalRead(ANTI_CLOCK_ZX_SWITCH)) {
-    rotate(2, false);
-    previousUserInput = millis();
+    if (digitalRead(CLOCK_XY_SWITCH)) {
+      // Serial.println("Detected green button");
+      rotate(0, true);
+      previousUserInput = millis();
+    } else if (digitalRead(CLOCK_YZ_SWITCH)) {
+      // Serial.println("Detected red button");
+      rotate(1, true);
+      previousUserInput = millis();
+    } else if (digitalRead(CLOCK_ZX_SWITCH)) {
+      // Serial.println("Tried rotating xz");
+      // Serial.println("Detected white button");
+      rotate(2, true);
+      previousUserInput = millis();
+    } else if (digitalRead(ANTI_CLOCK_XY_SWITCH)) {
+      rotate(0, false);
+      previousUserInput = millis();
+    } else if (digitalRead(ANTI_CLOCK_YZ_SWITCH)) {
+      rotate(1, false);
+      previousUserInput = millis();
+    } else if (digitalRead(ANTI_CLOCK_ZX_SWITCH)) {
+      rotate(2, false);
+      previousUserInput = millis();
+    }
+  } else {
+      if (digitalRead(CLOCK_XY_SWITCH)) {
+      game_end = false;
+      score = 0;
+      Serial.println("Switch pressed");
+      generate_new_block();
+    }
   }
 
 }
 
-// void show_score() {
-//   digitalWrite(segment_digit[(segment_digit_counter+1)%4], HIGH); // So remove the previous digit
-//   ((score / (10 ** segment_digit_counter)) % 10)
+
+void show_number(int num, int digit) {
+  for (int i = 0; i < 4; i++) {
+    digitalWrite(display_digit[i], HIGH); // everything is deactivated
+  }
+  digitalWrite(display_digit[digit], LOW);
+  for (int i = 0; i < 7; i++) {
+    digitalWrite(display_segment[i], numbers[num][i]);
+  } 
+}
+
+// void show_score(int number) {
+//   // digitalWrite(segment_digit[(segment_digit_counter+1)%4], HIGH); // So remove the previous digit
+//   // ((score / (10 ** segment_digit_counter)) % 10)
+//   int ten_pow = 1;
+//   // unsigned long int prev_score = 0;
+//   for (int i = 0; i < 4; i++) {
+//     show_number((number / ten_pow) % 10, i);
+//     // delay(2); // 2 milliseconds :(
+//     ten_pow *= 10;
+//   }
 // }
+
+int ten_pows[4] = {1, 10, 100, 1000};
 
 void loop() {
 
   unsigned long current_millis = millis();
+  
   send_to_shift_reg();
-  // segment_digit_counter += 1;
-  // segment_digit_counter %= 4;
-
-  // if (current_millis - last_show >= 50) {
-  //   send_to_shift_reg();
-  //   last_show = current_millis;
-  // }
+  
+  show_number((score / ten_pows[digit_show]) % 10, digit_show);
+  digit_show += 1;
+  digit_show %= 4;
 
   if (current_millis - previousUserInput >= userInterval) {
     user_input();    
   }
 
-  if (current_millis - previousMillis >= drop_interval) {
-    move({0, 0, 1});
-    // pos_global_blocks();
-    previousMillis = current_millis;
+  if (!game_end) {
+    if (current_millis - previousMillis >= drop_interval) {
+      move({0, 0, 1});
+      // pos_global_blocks();
+      previousMillis = current_millis;
+    }
   }
-
-
 
 }
   
