@@ -1,8 +1,9 @@
 # 3D Tetris
 
+### Demo Gameplay: [https://youtu.be/y2RadXvBAWg](https://youtu.be/y2RadXvBAWg) 
+
 ![](images/image5.jpg)
 
-### Demo Gameplay: [https://youtu.be/y2RadXvBAWg](https://youtu.be/y2RadXvBAWg) 
 
 # Introduction
 
