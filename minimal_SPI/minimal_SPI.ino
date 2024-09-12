@@ -322,8 +322,8 @@ void breaking_rows() {
 
 
 void generate_new_block() {
-    // int randNumber = random(4);
-    int randNumber = 3;
+    int randNumber = random(4);
+    // int randNumber = 1;
 
     if (try_rand_generate == 1000) {
 
@@ -750,6 +750,7 @@ void user_input() {
       game_end = false;
       score = 0;
       Serial.println("Switch pressed");
+      previousUserInput = millis();
       generate_new_block();
     }
   }
