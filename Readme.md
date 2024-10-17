@@ -2,7 +2,10 @@
 
 ### Demo Gameplay: [https://youtu.be/y2RadXvBAWg](https://youtu.be/y2RadXvBAWg) 
 
-![](images/image5.jpg)
+<p align="center">
+<img src="images/image5.jpg" width="30%">  
+</p>
+
 
 
 # Introduction
@@ -64,7 +67,9 @@ I used boxes.py console2 design: [https://www.festi.info/boxes.py/Console2?langu
 I found the idea of exploiting the persistence of vision and charlieplexing very interesting.   
 As explained in the architecture, there are 10 anode and 16 cathodes for every color. To light up the desired LEDs I loop through the anode levels, setting exactly one of them high, and at the same time, set low to the cathodes of the LEDs that need to be turn on. This reduced the output pins from 160 to 26\.
 
-![](images/image2.png)
+<p align="center">
+<img src="images/image2.png" width="30%">  
+</p>
 
 ## 8-bit shift registers
 
@@ -90,7 +95,9 @@ Finally, once I was satisfied with the static displays, I coded up the logic for
 ## Ideas that didn’t pan out
 
 For me, a bigger constraint in this project was time than the concreteness of the idea. I wanted to add color to the project, and though I was able to get it to work \[refer to the following figure\], but adding up wiring for the green and blue cathodes made the wiring messier and more difficult to debug.  
-![](images/image3.png)
+<p align="center">
+<img src="images/image3.png" width="30%">  
+</p>
 
 ## Hardware that had to be changed
 
@@ -105,9 +112,7 @@ I also realized that building hardware takes significantly more time than softwa
 # Artifacts
 
 Iterative building of cube:  
-![](images/image1.png) to ![](images/image6.png) to
-
-![](images/image4.png)
+<img src="images/image1.png" width="30%"> to <img src="images/image6.png" width="30%"> to <img src="images/image4.png" width="30%">  
 
 Testing of cube with shift register  
 [LED Cube Test Video.mp4](https://drive.google.com/file/d/1Bf3DxeIcwKaEm-6IlDvaN-Q8gCoMg0oe/view?usp=sharing)
